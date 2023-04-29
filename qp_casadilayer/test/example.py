@@ -6,8 +6,8 @@ n_equ = 3
 n_inequ = 2
 batch_size = 4
 
-P_sqrt_tch = torch.randn(batch_size, n_dim, n_dim, requires_grad=True)
-P_tch = torch.matmul(torch.transpose(P_sqrt_tch, -2, -1), P_sqrt_tch)
+Q_sqrt_tch = torch.randn(batch_size, n_dim, n_dim, requires_grad=True)
+Q_tch = torch.matmul(torch.transpose(Q_sqrt_tch, -2, -1), Q_sqrt_tch)
 q_tch = torch.randn(batch_size, n_dim, 1, requires_grad=True)
 A_tch = torch.randn(batch_size, n_equ, n_dim, requires_grad=True)
 b_tch = torch.randn(batch_size, n_equ, 1, requires_grad=True)
@@ -16,7 +16,7 @@ h_tch = torch.randn(batch_size, n_inequ, 1, requires_grad=True)
 
 # vectorize and concatenate all matrices in QP as batch of vectors
 param_tch = torch.hstack(
-    (torch.flatten(P_tch, start_dim=-2),
+    (torch.flatten(Q_tch, start_dim=-2),
      torch.flatten(q_tch, start_dim=-2),
      torch.flatten(A_tch, start_dim=-2),
      torch.flatten(b_tch, start_dim=-2),
