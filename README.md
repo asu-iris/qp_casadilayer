@@ -1,22 +1,25 @@
-# Quadratic Programming CasAdi Layer
+# Quadratic Programming Layer (Pytorch)
 
-A differentiable quadratic programing (QP) layer, that can be embedded into any neural networks. A QP_CasadiLayer solves a parametrized QP problem given by
-the canonical form of quadratic program is
+This implements a differentiable quadratic programing layer (QP_CasadiLayer),
+which can be embedded into any neural networks written in Pytorch.
+A QP_CasadiLayer solves a parametrized QP of the following
+canonical form:
 
- min_x 1/2 x'Qx+ q'x, s.t. Ax+b =0 and Gz+h<=0
+min_x 1/2 x'Qx+ q'x, s.t. Ax+b =0 and Gz+h<=0
 
-It solves the problem in its forward pass (using CasAdi QP solving API), and it computes
-the derivative of problem's solution map with respect to the parameters in
-its backward pass.
+In forward pass, this QP_CasadiLayer solves for the solution to a QP  using [CasAdi](https://web.casadi.org/docs/) 
+qpsol API. In  backward pass, the QP_CasadiLayer computes the derivative of the QP solution 
+with respect to the QP parameters using Implicit Function Theorem.
 
-### Some features:
-- It supports batching
-- Testing results show it is >50x faster than [cvxpylayers](https://github.com/cvxgrp/cvxpylayers) in forward pass
-- Testing results show it is >10x faster than [cvxpylayers](https://github.com/cvxgrp/cvxpylayers) in backward pass
+### Some unofficial features
+
+- Supports batching process of QPs
+- Initial testing shows it is >50x faster than [cvxpylayers](https://github.com/cvxgrp/cvxpylayers) in forward pass
+- Initial testing shows it is >10x faster than [cvxpylayers](https://github.com/cvxgrp/cvxpylayers) in backward pass
 
 
+### An Example
 
-### Example:
 ```
 import torch
 from qp_casadilayer.torch import QP_CasadiLayer
@@ -56,3 +59,14 @@ qp_sol_tch.sum().backward()
 
 
 ```
+
+### NOTE
+This repo will or will not be maintained since its release. No warrants are offered. 
+ Users who seek more comprehensive APIs for differentiable convex layers should be directed to 
+the following repo
+
+- cvxpylayers: [https://github.com/cvxgrp/cvxpylayers](https://github.com/cvxgrp/cvxpylayers)
+- relevant papers: 
+  - [Differentiable Convex Optimization Layers](https://arxiv.org/abs/1910.12430) by Akshay Agrawal, Brandon Amos, Shane Barratt, Stephen Boyd, Steven Diamond, Zico Kolter
+  - [Differentiating through log-log convex programs](https://web.stanford.edu/~boyd/papers/pdf/diff_llcvx.pdf) by Agrawal, Akshay and Boyd, Stephen
+  - [OptNet: Differentiable Optimization as a Layer in Neural Networks](https://arxiv.org/abs/1703.00443) by Brandon Amos, J. Zico Kolter
