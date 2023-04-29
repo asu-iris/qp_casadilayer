@@ -63,10 +63,10 @@ qp_sol_tch.sum().backward()
 ### NOTE
 This repo will or will not be maintained since its release. No warrants are offered. 
  Users who seek more comprehensive APIs for differentiable convex layers should be directed to 
-the following repo
+the following repo and resources:
 
 - cvxpylayers: [https://github.com/cvxgrp/cvxpylayers](https://github.com/cvxgrp/cvxpylayers)
-- relevant papers: 
+- Papers: 
   - [Differentiable Convex Optimization Layers](https://arxiv.org/abs/1910.12430) by Akshay Agrawal, Brandon Amos, Shane Barratt, Stephen Boyd, Steven Diamond, Zico Kolter
   - [Differentiating through log-log convex programs](https://web.stanford.edu/~boyd/papers/pdf/diff_llcvx.pdf) by Agrawal, Akshay and Boyd, Stephen
   - [OptNet: Differentiable Optimization as a Layer in Neural Networks](https://arxiv.org/abs/1703.00443) by Brandon Amos, J. Zico Kolter
