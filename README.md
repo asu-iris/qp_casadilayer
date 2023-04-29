@@ -11,7 +11,7 @@ In forward pass, this QP_CasadiLayer solves for the solution to a QP  using [Cas
 qpsol API. In  backward pass, the QP_CasadiLayer computes the derivative of the QP solution 
 with respect to the QP parameters using Implicit Function Theorem.
 
-### Some unofficial features
+### Some Unofficial Features
 
 - Supports batching process of QPs
 - Initial testing shows it is >50x faster than [cvxpylayers](https://github.com/cvxgrp/cvxpylayers) in forward pass
