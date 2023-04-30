@@ -18,8 +18,8 @@ class QP_CasadiLayer_Query(torch.nn.Module):
 
     """
 
-    def __init__(self, n_dim, n_equ=0, n_inequ=0,
-                 Q=True, q=True, A=True, b=True, G=True, h=True,
+    def __init__(self, n_dim, n_equ, n_inequ,
+                 diff_Q=False, diff_q=False, diff_A=False, diff_b=False, diff_G=False, diff_h=False,
                  solver=None):
 
         """
@@ -31,13 +31,13 @@ class QP_CasadiLayer_Query(torch.nn.Module):
             n_dim: dimension of QP variable in QP canonical form
             n_equ: number of equality constraints in QP canonical form
             n_inequ: number of inequality constraints in QP canonical form
-            Q: True if you want it learnable, otherwise set as query tensor (no grad is calculated)
-            q: True if you want it learnable, otherwise set as query tensor (no grad is calculated)
-            A: True if you want it learnable, otherwise set as query tensor (no grad is calculated)
-            b: True if you want it learnable, otherwise set as query tensor (no grad is calculated)
-            G: True if you want it learnable, otherwise set as query tensor (no grad is calculated)
-            h: True if you want it learnable, otherwise set as query tensor (no grad is calculated)
-            solver: QP solver used (TODO)
+            diff_Q: True if you want it differentiable, otherwise set as query non-diff tensor
+            diff_q: True if you want it differentiable, otherwise set as query non-diff tensor
+            diff_A: True if you want it differentiable, otherwise set as query non-diff tensor
+            diff_b: True if you want it differentiable, otherwise set as query non-diff tensor
+            diff_G: True if you want it differentiable, otherwise set as query non-diff tensor
+            diff_h: True if you want it differentiable, otherwise set as query non-diff tensor
+            solver: QP solver (TODO)
         """
 
         super(QP_CasadiLayer_Query, self).__init__()
@@ -57,55 +57,55 @@ class QP_CasadiLayer_Query(torch.nn.Module):
         # If a matrix is True in arguments, it means this matrix is learnable
         # NOTE: CasAdi's matrix construction is column-first.
         # To make it compatible to Numpy or Tensor, we need to do transpose when necessary.
-        learn_param = []
+        diff_param = []
         query_param = []
 
         Q = cs.SX.sym('QP_Q', self.n_dim, self.n_dim)
-        if Q:
-            learn_param.append(cs.vec(Q.T))
+        if diff_Q:
+            diff_param.append(cs.vec(Q.T))
         else:
             query_param.append(cs.vec(Q.T))
 
         q = cs.SX.sym('QP_q', self.n_dim)
-        if q:
-            learn_param.append(q)
+        if diff_q:
+            diff_param.append(q)
         else:
             query_param.append(q)
 
         A = cs.SX.sym('QP_A', self.n_equ, self.n_dim)
-        if A:
-            learn_param.append(cs.vec(A.T))
+        if diff_A:
+            diff_param.append(cs.vec(A.T))
         else:
             query_param.append(cs.vec(A.T))
 
         b = cs.SX.sym('QP_b', self.n_equ)
-        if b:
-            learn_param.append(b)
+        if diff_b:
+            diff_param.append(b)
         else:
             query_param.append(b)
 
         G = cs.SX.sym('QP_G', self.n_inequ, self.n_dim)
-        if G:
-            learn_param.append(cs.vec(G.T))
+        if diff_G:
+            diff_param.append(cs.vec(G.T))
         else:
             query_param.append(cs.vec(G.T))
 
         h = cs.SX.sym('QP_h', self.n_inequ)
-        if h:
-            learn_param.append(h)
+        if diff_h:
+            diff_param.append(h)
         else:
             query_param.append(h)
 
         # vectorize the learnable parameters
-        learn_param = cs.vcat(learn_param)
-        self.n_learn_param = learn_param.numel()
+        diff_param = cs.vcat(diff_param)
+        self.n_learn_param = diff_param.numel()
 
         # vectorize the query parameters
         query_param = cs.vcat(query_param)
         self.n_query_param = query_param.numel()
 
         # concatenate two params
-        param = cs.vertcat(learn_param, query_param)
+        param = cs.vertcat(diff_param, query_param)
         self.n_param = self.n_learn_param + self.n_query_param
 
         # define the symbolic objective in QP
@@ -140,7 +140,7 @@ class QP_CasadiLayer_Query(torch.nn.Module):
         imp_x = cs.vertcat(x, lam_equ, lam_inequ)
         # implicit theorem
         grad_imp_x = cs.jacobian(imp_g, imp_x)
-        grad_imp_p = cs.jacobian(imp_g, learn_param)
+        grad_imp_p = cs.jacobian(imp_g, diff_param)
         grad_imp_x_p = -cs.inv(grad_imp_x) @ grad_imp_p
         grad_x_p = grad_imp_x_p[0:self.n_dim, :]
 
@@ -152,22 +152,15 @@ class QP_CasadiLayer_Query(torch.nn.Module):
 
             @staticmethod
             def forward(ctx, *params):
-                # Always suppose the first dimension is always a batch dimension
                 """
-
                 Args:
                     ctx: context for autograd
-                    *params: (learn_param, query_param) in canonical QP, where
-                    learn_param is of [batch_size1 x n_learn_param] and
-                    query_param is of [batch_size2 x n_query_param]. When batch_size1 is not equal to batch_size2,
-                    we need to do some broadcast, depending on the values of batch_size1 and batch_size2.
+                    *params: (diff_param, query_param) in canonical QP, where
+                    diff_param is [batch_size, n_learn_param (hyperplane_dim*n_hyperplane)]
+                    query_param is [batch_size, n_point, n_query_param].
 
                 Returns:
-                    Solution of QP, which has a shape [batch_size x n_dim], where
-                    batch_size will depend on batch_size1 and batch_size2 in the input arguments,
-                    according to following rules:
-                    if batch_size1 equals batch_size2,  batch_size= batch_size1 (or batch_size2).
-                    else, batch_size= (batch_size1 x batch_size2)
+                    Solution of QP, which has a shape [batch_size, n_point, n_dim]
                 """
 
                 learn_param, query_param = params
@@ -176,68 +169,43 @@ class QP_CasadiLayer_Query(torch.nn.Module):
                 ctx.dtype = learn_param.dtype
                 ctx.device = learn_param.device
 
-                # if any param misses the batch dimension, add it
-                if learn_param.ndim == 1:
-                    learn_param = torch.unsqueeze(learn_param, 0)
-                if query_param.ndim == 1:
-                    query_param = torch.unsqueeze(query_param, 0)
+                # determine number of query point
+                ctx.n_point = query_param.shape[-2]
 
-                # determine the batch size for both params, and broadcast if necessary.
-                ctx.batch_size1 = learn_param.shape[0]
-                ctx.batch_size2 = query_param.shape[0]
+                # broadcast diff_param to match the shape of query_param
+                learn_param = learn_param.unsqueeze(dim=-2).expand_as(query_param)
+                param = torch.cat((learn_param, query_param), dim=-1)  # [batch_size, n_point, n_param]
 
-                # if batch_size1 equals batch_size2, broadcast will not be performed
-                if ctx.batch_size1 == ctx.batch_size2:
-                    param = torch.hstack((learn_param, query_param))  # [batch_size1 (or batch_size2) x n_param]
-                    # pass param into QP solver and solve it in batch!
-                    param = self.to_numpy(param)
-                    sol = self.qp_solver_fn(p=param.T, lbg=self.qp_constraint_lb, ubg=self.qp_constraint_ub)
-                    sol_x = sol['x']  # [n_dim x batch_size1 (or batch_size2)]
-                    lam_g = sol['lam_g']
-                    ctx.param = param
-                    ctx.sol_x = sol_x
-                    ctx.lam_g = lam_g
-                    return self.to_torch(sol_x.full().T, ctx.dtype, ctx.device).squeeze()
+                # pass param into QP solver and solve it in batch
+                sol_param = param.reshape(-1, self.n_param)  # [batch_size*n_point, n_param]
+                sol_param = self.to_numpy(sol_param)
+                sol = self.qp_solver_fn(p=sol_param.T, lbg=self.qp_constraint_lb, ubg=self.qp_constraint_ub)
+                sol_x = sol['x']  # [n_dim, batch_size*n_point]
+                sol_lam_g = sol['lam_g']
+                ctx.sol_param = sol_param
+                ctx.sol_x = sol_x
+                ctx.sol_lam_g = sol_lam_g
 
-                # if batch_size1 is not equal to batch_size2, broadcast will be performed
-                else:
-                    learn_param = torch.repeat_interleave(learn_param, ctx.batch_size2, dim=0)
-                    query_param = query_param.repeat(ctx.batch_size1, 1)
-                    param = torch.hstack((learn_param, query_param))  # [batch_size1 * batch_size2 x n_param]
-
-                    # pass param into QP solver and solve it in batch!
-                    param = self.to_numpy(param)
-                    sol = self.qp_solver_fn(p=param.T, lbg=self.qp_constraint_lb, ubg=self.qp_constraint_ub)
-                    sol_x = sol['x']  # [n_dim x batch_size1 * batch_size2]
-                    lam_g = sol['lam_g']
-                    ctx.param = param
-                    ctx.sol_x = sol_x
-                    ctx.lam_g = lam_g
-
-                    return self.to_torch(sol_x.full().T, ctx.dtype, ctx.device).reshape(
-                        (ctx.batch_size1, ctx.batch_size2, -1)).squeeze()
+                return self.to_torch(sol_x.full().T, ctx.dtype, ctx.device).reshape(-1, ctx.n_point, self.n_dim)
 
             @staticmethod
             def backward(ctx, *grad_outputs):
+                backprop_grad = grad_outputs[0]  # [batch_size, n_point, n_dim]
 
-                if ctx.batch_size1 == ctx.batch_size2:
-                    backprop_grad = grad_outputs[0]  # [batch_size1 (or batch_size2), n_dim]
-                else:
-                    backprop_grad = grad_outputs[0]  # [batch_size1, batch_size2, n_dim]
-                    backprop_grad = backprop_grad.reshape((-1, n_dim))  # [batch_size1*batch_size2, n_dim]
+                # Implicit function theorem
+                jac_x_p = self.qp_imp_fn(ctx.sol_x, ctx.sol_lam_g,
+                                         ctx.sol_param.T).full()  # [n_dim, n_learn_param*batch_size*n_point]
 
-                # Apply implicit function theorem (below, batch_size is either batch_size1 or batch_size1*batch_size2)
-                jac_x_p = self.qp_imp_fn(ctx.sol_x, ctx.lam_g,
-                                         ctx.param.T).full()  # shape: [n_dim x (n_param * batch_size)]
+                jac_x_p = np.array(np.hsplit(jac_x_p, ctx.sol_x.shape[1]))  # [batch_size*n_point, n_dim, n_learn_param]
 
-                jac_x_p = np.array(np.hsplit(jac_x_p, ctx.sol_x.shape[1]))  # shape: [batch_size x n_dim x n_param]
-                jac_x_p = self.to_torch(jac_x_p, ctx.dtype, ctx.device)
-
+                # reshape to [batch_size, n_point, n_dim, n_learn_param]
+                jac_x_p = self.to_torch(jac_x_p, ctx.dtype, ctx.device).reshape(-1, ctx.n_point, self.n_dim,
+                                                                                self.n_learn_param)
                 # Assemble the backpropagation
-                # grad_p = torch.matmul(backprop_grad.unsqueeze(dim=-2), jac_x_p).squeeze()
-                grad_p = torch.einsum('...i,...ij->...j', backprop_grad, jac_x_p)
+                grad_p = torch.einsum('...i,...ij->...j', backprop_grad,
+                                      jac_x_p)  # [batch_size, n_point, n_learn_param]
 
-                return grad_p, None
+                return grad_p.sum(dim=-2), None
 
         self.diff_qp_layer = _diff_qp_layer.apply
 
